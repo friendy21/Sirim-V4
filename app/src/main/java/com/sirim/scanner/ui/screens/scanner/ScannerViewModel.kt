@@ -46,6 +46,9 @@ class ScannerViewModel private constructor(
     private val _status = MutableStateFlow(ScanStatus())
     val status: StateFlow<ScanStatus> = _status.asStateFlow()
 
+    private val _ocrDebugInfo = MutableStateFlow(OcrDebugInfo())
+    val ocrDebugInfo: StateFlow<OcrDebugInfo> = _ocrDebugInfo.asStateFlow()
+
     private val _lastResultId = MutableStateFlow<Long?>(null)
     val lastResultId: StateFlow<Long?> = _lastResultId.asStateFlow()
 
@@ -183,6 +186,9 @@ class ScannerViewModel private constructor(
 
     private suspend fun handleResult(result: OcrResult, autoPersist: Boolean) {
         try {
+            // Extract debug information
+            val startTime = System.currentTimeMillis()
+
             val fields = when (result) {
                 is OcrResult.Success -> result.fields
                 is OcrResult.Partial -> result.fields
@@ -197,6 +203,23 @@ class ScannerViewModel private constructor(
             _extractedFields.value = validation.sanitized
             _validationWarnings.value = validation.warnings
             _validationErrors.value = validation.errors
+
+            // Update debug info
+            val rawText = fields.values.joinToString("\n") { it.value }
+            val detectedWords = rawText.split(Regex("\\s+")).filter { it.isNotBlank() }
+            val qrCode = when (result) {
+                is OcrResult.Success -> result.qrCode
+                is OcrResult.Partial -> result.qrCode
+                else -> null
+            }
+
+            _ocrDebugInfo.value = OcrDebugInfo(
+                rawText = rawText,
+                detectedWords = detectedWords,
+                qrCodeValue = qrCode,
+                barcodeFormat = if (qrCode != null) "QR Code" else null,
+                processingTimeMs = System.currentTimeMillis() - startTime
+            )
 
             val baseStatus = when (result) {
                 is OcrResult.Success -> ScanState.Ready

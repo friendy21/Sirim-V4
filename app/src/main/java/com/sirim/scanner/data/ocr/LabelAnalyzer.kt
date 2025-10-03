@@ -204,7 +204,11 @@ class LabelAnalyzer(
             try {
                 val result = recognizeText(rotated)
                 if (!result.isNullOrBlank()) {
-                    return result
+                    return result.also {
+                        if (rotated !== bitmap && !rotated.isRecycled) {
+                            rotated.recycle()
+                        }
+                    }
                 }
             } finally {
                 if (rotated !== bitmap && !rotated.isRecycled) {
