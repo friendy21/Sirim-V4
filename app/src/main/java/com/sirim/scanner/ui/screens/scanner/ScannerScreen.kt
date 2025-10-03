@@ -94,6 +94,7 @@ fun ScannerScreen(
     val errors by viewModel.validationErrors.collectAsState()
     val lastRecordId by viewModel.lastResultId.collectAsState()
     val batchUiState by viewModel.batchUiState.collectAsState()
+    val ocrDebugInfo by viewModel.ocrDebugInfo.collectAsState()
     val hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -132,6 +133,7 @@ fun ScannerScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             StatusCard(status = status)
+            OcrDebugPanel(debugInfo = ocrDebugInfo)
             BatchControls(
                 uiState = batchUiState,
                 onToggle = viewModel::setBatchMode,

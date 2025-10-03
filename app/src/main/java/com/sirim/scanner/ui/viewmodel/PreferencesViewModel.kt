@@ -38,13 +38,28 @@ class PreferencesViewModel private constructor(
             _authError.value = "Username and password are required"
             return
         }
-        if (username == ADMIN_USERNAME && password == ADMIN_PASSWORD) {
+
+        // Hash password with SHA-256 (basic security improvement)
+        val hashedInput = hashPassword(password)
+        val storedHash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918" // "admin"
+
+        if (username.equals(ADMIN_USERNAME, ignoreCase = true) && hashedInput == storedHash) {
             viewModelScope.launch {
                 manager.setAuthentication(System.currentTimeMillis())
                 _authError.value = null
             }
         } else {
             _authError.value = "Invalid credentials"
+        }
+    }
+
+    private fun hashPassword(password: String): String {
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(password.toByteArray(Charsets.UTF_8))
+            hash.joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            ""
         }
     }
 
@@ -70,8 +85,7 @@ class PreferencesViewModel private constructor(
 
     companion object {
         private const val ADMIN_USERNAME = "admin"
-        private const val ADMIN_PASSWORD = "admin"
-
+        
         fun Factory(manager: PreferencesManager): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {

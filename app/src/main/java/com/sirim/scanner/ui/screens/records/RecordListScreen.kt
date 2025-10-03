@@ -2,6 +2,7 @@ package com.sirim.scanner.ui.screens.records
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +15,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,6 +26,9 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -31,11 +37,31 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.sirim.scanner.data.db.SirimRecord
 import com.sirim.scanner.ui.common.DateRangeFilter
 import com.sirim.scanner.ui.common.VerifiedFilter
+
+enum class SortOption {
+    DATE_DESC,
+    DATE_ASC,
+    SERIAL_ASC,
+    SERIAL_DESC,
+    BRAND_ASC,
+    BRAND_DESC
+}
+
+fun SortOption.label(): String = when (this) {
+    SortOption.DATE_DESC -> "Date (Newest)"
+    SortOption.DATE_ASC -> "Date (Oldest)"
+    SortOption.SERIAL_ASC -> "Serial (A-Z)"
+    SortOption.SERIAL_DESC -> "Serial (Z-A)"
+    SortOption.BRAND_ASC -> "Brand (A-Z)"
+    SortOption.BRAND_DESC -> "Brand (Z-A)"
+}
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +71,7 @@ fun RecordListScreen(
     onAdd: () -> Unit,
     onEdit: (SirimRecord) -> Unit,
     onBack: () -> Unit,
+    onNavigateToExport: () -> Unit,
     isAuthenticated: Boolean,
     onRequireAuthentication: (() -> Unit) -> Unit
 ) {
@@ -58,6 +85,11 @@ fun RecordListScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToExport) {
+                        Icon(Icons.Default.Download, contentDescription = "Export")
                     }
                 }
             )
@@ -93,6 +125,34 @@ fun RecordListScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            var showSortMenu by remember { mutableStateOf(false) }
+
+            Box {
+                OutlinedButton(
+                    onClick = { showSortMenu = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Sort, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sort: ${uiState.sortOption.label()}")
+                }
+
+                DropdownMenu(
+                    expanded = showSortMenu,
+                    onDismissRequest = { showSortMenu = false }
+                ) {
+                    SortOption.values().forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label()) },
+                            onClick = {
+                                viewModel.setSortOption(option)
+                                showSortMenu = false
+                            }
+                        )
+                    }
+                }
+            }
 
             FilterSection(
                 uiState = uiState,

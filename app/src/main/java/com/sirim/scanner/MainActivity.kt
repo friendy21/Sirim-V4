@@ -169,6 +169,7 @@ private fun NavGraph(container: AppContainer, navController: NavHostController) 
                     navController.navigate("${Destinations.RecordForm.route}?recordId=${record.id}")
                 },
                 onBack = { navController.popBackStack() },
+                onNavigateToExport = { navController.navigate(Destinations.Export.route) },
                 isAuthenticated = isSessionValid,
                 onRequireAuthentication = { action -> requestAuthentication(action) }
             )

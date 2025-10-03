@@ -74,16 +74,14 @@ android {
                 "META-INF/NOTICE",
                 "META-INF/NOTICE.txt"
             )
-            packaging {
-                    jniLibs {// Tell Gradle to pick the first instance of any conflicting .so file it finds.
-                        pickFirsts += "**/libjpeg.so"
-                        pickFirsts += "**/libpng.so"
-                        pickFirsts += "**/liblept.so"
-                        pickFirsts += "**/libtesseract.so"
-
-                }
-            }
-
+        }
+        jniLibs {
+            pickFirsts += setOf(
+                "**/libjpeg.so",
+                "**/libpng.so",
+                "**/liblept.so",
+                "**/libtesseract.so"
+            )
         }
     }
 

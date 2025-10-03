@@ -30,8 +30,9 @@ class RecordViewModel private constructor(
         .debounce(300)
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
     private val filters = MutableStateFlow(RecordFilters())
+    private val sortOption = MutableStateFlow(SortOption.DATE_DESC)
 
-    val uiState: StateFlow<RecordListUiState> = combine(allRecords, debouncedQuery, filters) { records, query, filters ->
+    val uiState: StateFlow<RecordListUiState> = combine(allRecords, debouncedQuery, filters, sortOption) { records, query, filters, sort ->
         val normalizedQuery = query.trim()
         val availableBrands = records.mapNotNull { it.brandTrademark.takeIf(String::isNotBlank) }
             .distinct()
@@ -60,12 +61,21 @@ class RecordViewModel private constructor(
             val matchesDate = startTimestamp?.let { record.createdAt >= it } ?: true
             matchesQuery && matchesVerified && matchesBrand && matchesDate
         }
+        val sortedRecords = when (sort) {
+            SortOption.DATE_DESC -> filteredRecords.sortedByDescending { it.createdAt }
+            SortOption.DATE_ASC -> filteredRecords.sortedBy { it.createdAt }
+            SortOption.SERIAL_ASC -> filteredRecords.sortedBy { it.sirimSerialNo }
+            SortOption.SERIAL_DESC -> filteredRecords.sortedByDescending { it.sirimSerialNo }
+            SortOption.BRAND_ASC -> filteredRecords.sortedBy { it.brandTrademark }
+            SortOption.BRAND_DESC -> filteredRecords.sortedByDescending { it.brandTrademark }
+        }
         RecordListUiState(
-            records = filteredRecords,
+            records = sortedRecords,
             availableBrands = availableBrands,
             query = normalizedQuery,
             filters = filters,
-            totalRecords = records.size
+            totalRecords = records.size,
+            sortOption = sort
         )
     }.stateIn(viewModelScope, SharingStarted.Lazily, RecordListUiState())
 
@@ -144,6 +154,10 @@ class RecordViewModel private constructor(
         filters.value = RecordFilters()
     }
 
+    fun setSortOption(option: SortOption) {
+        sortOption.value = option
+    }
+
     fun clearFormError() {
         _formError.value = null
     }
@@ -162,7 +176,8 @@ data class RecordListUiState(
     val availableBrands: List<String> = emptyList(),
     val query: String = "",
     val filters: RecordFilters = RecordFilters(),
-    val totalRecords: Int = 0
+    val totalRecords: Int = 0,
+    val sortOption: SortOption = SortOption.DATE_DESC
 )
 
 data class RecordFilters(
