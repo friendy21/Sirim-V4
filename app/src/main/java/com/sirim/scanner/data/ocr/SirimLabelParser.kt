@@ -3,66 +3,156 @@ package com.sirim.scanner.data.ocr
 import java.util.Locale
 import kotlin.math.min
 
+/**
+ * Parser responsible for extracting structured data from OCR and QR sources on
+ * SIRIM certification labels. The implementation is tuned specifically for the
+ * label layout (T + 9 digit serial under the QR code) and provides dual-source
+ * verification to maximise confidence when both OCR and QR agree.
+ */
 object SirimLabelParser {
+
+    private const val SERIAL_FIELD_KEY = "sirimSerialNo"
+
+    private const val EXACT_SERIAL_CONFIDENCE = 0.90f
+    private const val RELAXED_SERIAL_CONFIDENCE = 0.85f
+    private const val LEGACY_SERIAL_CONFIDENCE = 0.78f
+    private const val QR_BASE_CONFIDENCE = 0.98f
+    private const val VERIFIED_CONFIDENCE = 0.99f
+    private const val CONFLICT_CONFIDENCE = 0.90f
+
+    private const val PRIMARY_FIELD_CONFIDENCE = 0.75f
+    private const val SECONDARY_FIELD_CONFIDENCE = 0.65f
+    private const val TERTIARY_FIELD_CONFIDENCE = 0.60f
+
+    private const val CORRECTION_PENALTY = 0.03f
+    private const val LENGTH_PENALTY = 0.05f
+    private const val MIN_CONFIDENCE = 0.10f
+    private const val MAX_FIELD_CONFIDENCE = 0.95f
+
+    private val SIRIM_SERIAL_EXACT = Regex("(?<![A-Z0-9])T\\d{9}(?![A-Z0-9])", RegexOption.IGNORE_CASE)
+    private val SIRIM_SERIAL_RELAXED = Regex("(?<![A-Z0-9])T[\\s-]?(\\d{9})(?![A-Z0-9])", RegexOption.IGNORE_CASE)
+    private val TEA_SERIAL_PATTERN = Regex("(?<![A-Z0-9])TEA[\\s-]?(\\d{7})(?![A-Z0-9])", RegexOption.IGNORE_CASE)
 
     private val characterCorrections = mapOf(
         'O' to '0',
         'o' to '0',
         'I' to '1',
+        'i' to '1',
         'l' to '1',
         'S' to '5',
         's' to '5',
-        'B' to '8'
+        'B' to '8',
+        'b' to '8',
+        'Z' to '2',
+        'z' to '2',
+        'G' to '6',
+        'g' to '6',
+        'D' to '0',
+        'd' to '0'
     )
 
-    private val serialPatterns = listOf(
-        Regex("\\bTEA[-\\s]?([0-9O]{7})\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bT[-\\s]?([0-9O]{9})\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bSerial\\s*(No|Number)?[:\\uFF1A\\-]?\\s*([A-Z0-9]{6,12})\\b", RegexOption.IGNORE_CASE)
+    private data class FieldPatternSpec(
+        val regex: Regex,
+        val baseConfidence: Float,
+        val allowCorrections: Boolean = false,
+        val uppercaseResult: Boolean = false,
+        val defaultNotes: Set<FieldNote> = emptySet()
     )
 
-    private val fieldPatterns = mapOf(
+    private val fieldPatternSpecs: Map<String, List<FieldPatternSpec>> = mapOf(
         "batchNo" to listOf(
-            Regex("Batch\\s*(No|Number)?\\.?\\s*[:\\uFF1A\\-]?\\s*([A-Z0-9-]{5,200})", RegexOption.IGNORE_CASE),
-            Regex("\\b([A-Z]{2,}-\\d{4,})\\b")
+            FieldPatternSpec(
+                regex = Regex("(?:Batch)\\s*(?:No\\.?|Number)?\\s*[:\\-]?\\s*([A-Z0-9][A-Z0-9\\-]{2,199})", RegexOption.IGNORE_CASE),
+                baseConfidence = PRIMARY_FIELD_CONFIDENCE
+            ),
+            FieldPatternSpec(
+                regex = Regex("\\b([A-Z]{2,4}-\\d{4,})\\b"),
+                baseConfidence = SECONDARY_FIELD_CONFIDENCE,
+                defaultNotes = setOf(FieldNote.PATTERN_RELAXED)
+            )
         ),
         "brandTrademark" to listOf(
-            Regex("Brand\\s*/?\\s*Trademark\\s*[:\\uFF1A\\-]?\\s*([A-Z0-9 &'\\-]{2,1024})", RegexOption.IGNORE_CASE)
+            FieldPatternSpec(
+                regex = Regex("(?:Brand)\\s*/\\s*(?:Trademark)\\s*[:\\-]?\\s*([A-Z0-9][A-Z0-9 &'\\-]{1,1023})", RegexOption.IGNORE_CASE),
+                baseConfidence = PRIMARY_FIELD_CONFIDENCE
+            ),
+            FieldPatternSpec(
+                regex = Regex("(?:Brand|Trademark)\\s*[:\\-]?\\s*([A-Z0-9][A-Z0-9 &'\\-]{1,1023})", RegexOption.IGNORE_CASE),
+                baseConfidence = SECONDARY_FIELD_CONFIDENCE,
+                defaultNotes = setOf(FieldNote.PATTERN_RELAXED)
+            )
         ),
         "model" to listOf(
-            Regex("Model\\s*[:\\uFF1A\\-]?\\s*([A-Za-z0-9\\- /]{2,1500})", RegexOption.IGNORE_CASE)
+            FieldPatternSpec(
+                regex = Regex("(?:Model)\\s*[:\\-]?\\s*([A-Za-z0-9][A-Za-z0-9\\-\\s/]{1,1499})", RegexOption.IGNORE_CASE),
+                baseConfidence = PRIMARY_FIELD_CONFIDENCE
+            )
         ),
         "type" to listOf(
-            Regex("Type\\s*[:\\uFF1A\\-]?\\s*([A-Za-z0-9\\- /]{2,1500})", RegexOption.IGNORE_CASE)
+            FieldPatternSpec(
+                regex = Regex("(?:Type)\\s*[:\\-]?\\s*([A-Za-z0-9][A-Za-z0-9\\-\\s/]{1,1499})", RegexOption.IGNORE_CASE),
+                baseConfidence = PRIMARY_FIELD_CONFIDENCE
+            )
         ),
         "rating" to listOf(
-            Regex("Rating\\s*[:\\uFF1A\\-]?\\s*([A-Za-z0-9\\- /]{1,600})", RegexOption.IGNORE_CASE),
-            Regex("SAE\\s*([0-9]{1,2}W-?[0-9]{1,2})", RegexOption.IGNORE_CASE)
+            FieldPatternSpec(
+                regex = Regex("(?:Rating)\\s*[:\\-]?\\s*([A-Za-z0-9][A-Za-z0-9\\-\\s/]{1,599})", RegexOption.IGNORE_CASE),
+                baseConfidence = PRIMARY_FIELD_CONFIDENCE
+            ),
+            FieldPatternSpec(
+                regex = Regex("\\b(SAE\\s*\\d{1,2}W-?\\d{1,2})\\b", RegexOption.IGNORE_CASE),
+                baseConfidence = SECONDARY_FIELD_CONFIDENCE,
+                defaultNotes = setOf(FieldNote.PATTERN_RELAXED),
+                uppercaseResult = true
+            ),
+            FieldPatternSpec(
+                regex = Regex("\\b(API\\s*[A-Z]{2}(?:-\\d+)?)\\b", RegexOption.IGNORE_CASE),
+                baseConfidence = TERTIARY_FIELD_CONFIDENCE,
+                defaultNotes = setOf(FieldNote.PATTERN_RELAXED),
+                uppercaseResult = true
+            )
         ),
         "size" to listOf(
-            Regex("Size\\s*[:\\uFF1A\\-]?\\s*([0-9]+\\s*(L|ML|LITRE|LTR|KG))", RegexOption.IGNORE_CASE),
-            Regex("([0-9]+\\s*(L|ML|LITRE|LTR|KG))", RegexOption.IGNORE_CASE)
+            FieldPatternSpec(
+                regex = Regex("(?:Size)\\s*[:\\-]?\\s*(\\d+\\s*(?:L|ML|LITRE|LTR|KG))\\b", RegexOption.IGNORE_CASE),
+                baseConfidence = PRIMARY_FIELD_CONFIDENCE,
+                uppercaseResult = true
+            ),
+            FieldPatternSpec(
+                regex = Regex("\\b(\\d+\\s*(?:L|ML|LITRE|LTR|KG))\\b", RegexOption.IGNORE_CASE),
+                baseConfidence = SECONDARY_FIELD_CONFIDENCE,
+                uppercaseResult = true,
+                defaultNotes = setOf(FieldNote.PATTERN_RELAXED)
+            )
         )
     )
+
+    private val fieldPatterns: Map<String, List<Regex>> = fieldPatternSpecs.mapValues { entry ->
+        entry.value.map(FieldPatternSpec::regex)
+    }
 
     fun parse(text: String): Map<String, FieldConfidence> {
         if (text.isBlank()) return emptyMap()
 
-        val normalized = collapseVerticalText(text)
+        val normalized = normalizeText(text)
         val candidates = mutableMapOf<String, FieldConfidence>()
 
         extractSerial(normalized)?.let { serial ->
-            candidates["sirimSerialNo"] = serial
+            candidates[SERIAL_FIELD_KEY] = serial
         }
 
-        fieldPatterns.forEach { (field, patterns) ->
-            patterns.forEachIndexed { index, pattern ->
-                val match = pattern.find(normalized)
-                if (match != null) {
-                    val raw = match.groupValues.last().trim()
-                    val candidate = buildCandidate(field, raw, primaryPattern = index == 0)
-                    candidates.merge(field, candidate) { old, new -> old.mergeWith(new) }
+        fieldPatternSpecs.forEach { (field, specs) ->
+            specLoop@ for (spec in specs) {
+                val match = spec.regex.find(normalized) ?: continue
+                val raw = match.groupValues.lastOrNull()?.trim().orEmpty()
+                if (raw.isEmpty()) continue
+
+                val candidate = buildCandidate(field, raw, spec)
+                val existing = candidates[field]
+                if (existing == null || candidate.confidence > existing.confidence) {
+                    candidates[field] = candidate
                 }
+                break@specLoop
             }
         }
 
@@ -74,76 +164,164 @@ object SirimLabelParser {
         qrPayload: String?
     ): FieldConfidence? {
         val qrSerial = qrPayload?.let { payload ->
-            val match = Regex("T[0-9]{9}", RegexOption.IGNORE_CASE).find(payload)
-            match?.value?.uppercase(Locale.getDefault())
+            SIRIM_SERIAL_EXACT.find(payload)?.value
         } ?: return null
 
-        val corrected = correctCharacters(qrSerial)
-        val qrConfidence = FieldConfidence(
-            value = corrected.first,
-            confidence = 0.95f,
-            source = FieldSource.QR,
-            notes = corrected.second
+        val (correctedSerial, correctionNotes) = correctCharacters(
+            value = qrSerial,
+            uppercase = true,
+            enableCorrections = true
         )
+        val correctionPenalty = if (correctionNotes.isNotEmpty()) CORRECTION_PENALTY else 0f
+        val qrConfidenceValue = (QR_BASE_CONFIDENCE - correctionPenalty)
+            .coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
+        val baseNotes = correctionNotes.toMutableSet()
 
-        val existing = current["sirimSerialNo"]
+        val existing = current[SERIAL_FIELD_KEY]
         if (existing != null) {
-            val merged = existing.mergeWith(qrConfidence)
-            current["sirimSerialNo"] = merged
-            return merged
+            val matches = existing.value.equals(correctedSerial, ignoreCase = true)
+            val mergedNotes = (baseNotes + existing.notes).toMutableSet()
+            val mergedConfidence = if (matches) {
+                mergedNotes += FieldNote.VERIFIED_BY_MULTIPLE_SOURCES
+                VERIFIED_CONFIDENCE
+            } else {
+                mergedNotes += FieldNote.CONFLICTING_SOURCES
+                CONFLICT_CONFIDENCE
+            }
+            val verified = FieldConfidence(
+                value = correctedSerial,
+                confidence = mergedConfidence,
+                source = FieldSource.QR,
+                notes = mergedNotes
+            )
+            current[SERIAL_FIELD_KEY] = verified
+            return verified
         }
-        current["sirimSerialNo"] = qrConfidence
-        return qrConfidence
+
+        val qrOnly = FieldConfidence(
+            value = correctedSerial,
+            confidence = qrConfidenceValue,
+            source = FieldSource.QR,
+            notes = baseNotes
+        )
+        current[SERIAL_FIELD_KEY] = qrOnly
+        return qrOnly
     }
 
-    fun prettifyKey(key: String): String = key.replace(Regex("([A-Z])")) {
-        " " + it.value.lowercase(Locale.getDefault())
-    }.trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+    fun prettifyKey(key: String): String {
+        return when (key) {
+            SERIAL_FIELD_KEY -> "SIRIM Serial No."
+            "batchNo" -> "Batch No."
+            "brandTrademark" -> "Brand/Trademark"
+            "model" -> "Model"
+            "type" -> "Type"
+            "rating" -> "Rating"
+            "size" -> "Size"
+            else -> key.replace(Regex("([A-Z])")) { " ${it.value}" }
+                .trim()
+                .replaceFirstChar { char ->
+                    if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
+                }
+        }
+    }
+
+    fun isValidSerialFormat(serial: String): Boolean {
+        if (serial.isBlank()) return false
+        val value = serial.trim().uppercase(Locale.ROOT)
+        return SIRIM_SERIAL_EXACT.matches(value) || TEA_SERIAL_PATTERN.matches(value)
+    }
 
     private fun extractSerial(text: String): FieldConfidence? {
-        serialPatterns.forEachIndexed { index, regex ->
-            val match = regex.find(text)
-            if (match != null) {
-                val raw = match.groupValues.last().trim()
-                val (corrected, notes) = correctCharacters(raw)
-                val normalized = corrected.uppercase(Locale.getDefault())
-                val confidenceBoost = if (index == 0) 0.35f else 0.2f
-                val confidence = 0.55f + confidenceBoost - 0.05f * notes.count()
-                return FieldConfidence(
-                    value = normalized,
-                    confidence = confidence.coerceIn(0.1f, 0.95f),
-                    source = FieldSource.OCR,
-                    notes = notes
-                )
-            }
+        SIRIM_SERIAL_EXACT.find(text)?.let { match ->
+            val raw = match.value
+            val (corrected, notes) = correctCharacters(raw, uppercase = true, enableCorrections = true)
+            val penalty = if (notes.isNotEmpty()) CORRECTION_PENALTY else 0f
+            val confidence = (EXACT_SERIAL_CONFIDENCE - penalty).coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
+            return FieldConfidence(
+                value = corrected,
+                confidence = confidence,
+                source = FieldSource.OCR,
+                notes = notes
+            )
         }
+
+        SIRIM_SERIAL_RELAXED.find(text)?.let { match ->
+            val digits = match.groupValues.getOrNull(1)?.filter(Char::isDigit)
+            if (digits.isNullOrEmpty() || digits.length != 9) return@let
+            val candidate = "T$digits"
+            val (corrected, notes) = correctCharacters(candidate, uppercase = true, enableCorrections = true)
+            val penalty = if (notes.isNotEmpty()) CORRECTION_PENALTY else 0f
+            val confidence = (RELAXED_SERIAL_CONFIDENCE - penalty).coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
+            val noteSet = notes + FieldNote.PATTERN_RELAXED
+            return FieldConfidence(
+                value = corrected,
+                confidence = confidence,
+                source = FieldSource.OCR,
+                notes = noteSet
+            )
+        }
+
+        TEA_SERIAL_PATTERN.find(text)?.let { match ->
+            val digits = match.groupValues.getOrNull(1)?.filter(Char::isDigit)
+            if (digits.isNullOrEmpty() || digits.length != 7) return@let
+            val candidate = "TEA$digits"
+            val (corrected, notes) = correctCharacters(candidate, uppercase = true, enableCorrections = true)
+            val penalty = if (notes.isNotEmpty()) CORRECTION_PENALTY else 0f
+            val confidence = (LEGACY_SERIAL_CONFIDENCE - penalty).coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
+            val noteSet = notes + FieldNote.PATTERN_RELAXED
+            return FieldConfidence(
+                value = corrected,
+                confidence = confidence,
+                source = FieldSource.OCR,
+                notes = noteSet
+            )
+        }
+
         return null
     }
 
     private fun buildCandidate(
         field: String,
         rawValue: String,
-        primaryPattern: Boolean
+        spec: FieldPatternSpec
     ): FieldConfidence {
-        val (corrected, notes) = correctCharacters(rawValue)
-        val trimmed = enforceLength(field, corrected)
-        val baseConfidence = if (primaryPattern) 0.55f else 0.45f
-        val lengthPenalty = if (trimmed.second) 0.05f else 0f
-        val notesSet = notes + if (trimmed.second) setOf(FieldNote.LENGTH_TRIMMED) else emptySet()
-        val patternRelaxed = if (!primaryPattern) setOf(FieldNote.PATTERN_RELAXED) else emptySet()
-        val confidence = (baseConfidence - lengthPenalty - notes.count() * 0.05f)
-            .coerceIn(0.1f, 0.9f)
+        val (corrected, correctionNotes) = correctCharacters(
+            value = rawValue,
+            uppercase = spec.uppercaseResult,
+            enableCorrections = spec.allowCorrections
+        )
+        val (boundedValue, wasTrimmed) = enforceLength(field, corrected)
+
+        val penalty = buildPenalty(correctionNotes, wasTrimmed)
+        val confidence = (spec.baseConfidence - penalty).coerceIn(MIN_CONFIDENCE, MAX_FIELD_CONFIDENCE)
+
+        val notes = (correctionNotes + spec.defaultNotes).toMutableSet()
+        if (wasTrimmed) {
+            notes += FieldNote.LENGTH_TRIMMED
+        }
+
         return FieldConfidence(
-            value = trimmed.first,
+            value = boundedValue,
             confidence = confidence,
             source = FieldSource.OCR,
-            notes = notesSet + patternRelaxed
+            notes = notes
         )
+    }
+
+    private fun buildPenalty(correctionNotes: Set<FieldNote>, wasTrimmed: Boolean): Float {
+        var penalty = 0f
+        if (correctionNotes.isNotEmpty()) {
+            penalty += CORRECTION_PENALTY
+        }
+        if (wasTrimmed) {
+            penalty += LENGTH_PENALTY
+        }
+        return penalty
     }
 
     private fun enforceLength(field: String, value: String): Pair<String, Boolean> {
         val limit = when (field) {
-            "sirimSerialNo" -> 12
+            SERIAL_FIELD_KEY -> 12
             "batchNo" -> 200
             "brandTrademark" -> 1024
             "model", "type", "size" -> 1500
@@ -157,42 +335,39 @@ object SirimLabelParser {
         }
     }
 
-    private fun correctCharacters(value: String): Pair<String, Set<FieldNote>> {
-        var corrected = value
-        val appliedNotes = mutableSetOf<FieldNote>()
-        characterCorrections.forEach { (wrong, correct) ->
-            if (corrected.indexOf(wrong, ignoreCase = false) >= 0) {
-                corrected = corrected.replace(wrong, correct)
-                appliedNotes += FieldNote.CORRECTED_CHARACTER
-            }
+    private fun correctCharacters(
+        value: String,
+        uppercase: Boolean,
+        enableCorrections: Boolean
+    ): Pair<String, Set<FieldNote>> {
+        if (value.isEmpty()) {
+            val adjusted = if (uppercase) value.uppercase(Locale.ROOT) else value
+            return adjusted to emptySet()
         }
-        return corrected to appliedNotes
+
+        if (!enableCorrections) {
+            val adjusted = if (uppercase) value.uppercase(Locale.ROOT) else value
+            return adjusted to emptySet()
+        }
+
+        val builder = StringBuilder(value.length)
+        var correctionsApplied = 0
+        value.forEach { char ->
+            val replacement = characterCorrections[char] ?: char
+            if (replacement != char) {
+                correctionsApplied++
+            }
+            builder.append(replacement)
+        }
+
+        val corrected = if (uppercase) builder.toString().uppercase(Locale.ROOT) else builder.toString()
+        val notes = if (correctionsApplied > 0) setOf(FieldNote.CORRECTED_CHARACTER) else emptySet()
+        return corrected to notes
     }
 
-    private fun collapseVerticalText(text: String): String {
-        val cleaned = text.replace("\uFF1A", ":")
-        val lines = cleaned.lines()
-        val verticalSegments = buildString {
-            var buffer = StringBuilder()
-            lines.forEach { line ->
-                val trimmed = line.trim()
-                if (trimmed.length == 1 && trimmed.firstOrNull()?.isLetterOrDigit() == true) {
-                    buffer.append(trimmed)
-                } else {
-                    if (buffer.length >= 4) {
-                        append(buffer)
-                        append(' ')
-                    }
-                    buffer = StringBuilder()
-                }
-            }
-            if (buffer.length >= 4) {
-                append(buffer)
-            }
-        }.trim()
-
-        return "$cleaned $verticalSegments"
-            .replace("\n", " ")
+    private fun normalizeText(text: String): String {
+        return text
+            .replace('\uFF1A', ':')
             .replace(Regex("\\s+"), " ")
             .trim()
     }
