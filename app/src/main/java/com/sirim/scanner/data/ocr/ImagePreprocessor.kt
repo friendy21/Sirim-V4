@@ -2,7 +2,11 @@ package com.sirim.scanner.data.ocr
 
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.SystemClock
 import androidx.camera.core.ImageProxy
+import com.sirim.scanner.analytics.PreprocessingMetricsEvent
+import com.sirim.scanner.analytics.ScanAnalytics
+import com.sirim.scanner.analytics.nanosecondsToMillis
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.max
@@ -39,6 +43,7 @@ object ImagePreprocessor {
     private const val MAX_DIMENSION = 960
 
     fun preprocess(imageProxy: ImageProxy): PreprocessedImage? {
+        val startNs = SystemClock.elapsedRealtimeNanos()
         val original = imageProxy.toBitmap()?.ensureMaxDimension(MAX_DIMENSION) ?: return null
         ensureOpenCv()
 
@@ -104,6 +109,16 @@ object ImagePreprocessor {
         val region = roi?.let { Rect(it.x, it.y, it.width, it.height) }
 
         mats.forEach(Mat::release)
+
+        val durationMs = (SystemClock.elapsedRealtimeNanos() - startNs).nanosecondsToMillis()
+        ScanAnalytics.reportPreprocessingMetrics(
+            PreprocessingMetricsEvent(
+                durationMillis = durationMs,
+                inputWidth = original.width,
+                inputHeight = original.height,
+                roiDetected = roi != null
+            )
+        )
 
         return PreprocessedImage(
             original = original,

@@ -1,5 +1,8 @@
 package com.sirim.scanner.data.ocr
 
+import com.sirim.scanner.analytics.ScanAnalytics
+import com.sirim.scanner.analytics.SerialExtractionEvent
+import com.sirim.scanner.analytics.SerialVerificationEvent
 import java.util.Locale
 import kotlin.math.min
 
@@ -195,6 +198,22 @@ object SirimLabelParser {
                 notes = mergedNotes
             )
             current[SERIAL_FIELD_KEY] = verified
+            ScanAnalytics.reportSerialExtraction(
+                SerialExtractionEvent(
+                    source = FieldSource.QR,
+                    serialPreview = correctedSerial.take(12),
+                    confidence = verified.confidence,
+                    notes = verified.notes,
+                    matchedWithQr = matches
+                )
+            )
+            ScanAnalytics.reportSerialVerification(
+                SerialVerificationEvent(
+                    ocrSerial = existing.value,
+                    qrSerial = correctedSerial,
+                    agreed = matches
+                )
+            )
             return verified
         }
 
@@ -205,6 +224,15 @@ object SirimLabelParser {
             notes = baseNotes
         )
         current[SERIAL_FIELD_KEY] = qrOnly
+        ScanAnalytics.reportSerialExtraction(
+            SerialExtractionEvent(
+                source = FieldSource.QR,
+                serialPreview = correctedSerial.take(12),
+                confidence = qrOnly.confidence,
+                notes = qrOnly.notes,
+                matchedWithQr = null
+            )
+        )
         return qrOnly
     }
 
@@ -237,12 +265,23 @@ object SirimLabelParser {
             val (corrected, notes) = correctCharacters(raw, uppercase = true, enableCorrections = true)
             val penalty = if (notes.isNotEmpty()) CORRECTION_PENALTY else 0f
             val confidence = (EXACT_SERIAL_CONFIDENCE - penalty).coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
-            return FieldConfidence(
+            val candidate = FieldConfidence(
+
                 value = corrected,
                 confidence = confidence,
                 source = FieldSource.OCR,
                 notes = notes
             )
+            ScanAnalytics.reportSerialExtraction(
+                SerialExtractionEvent(
+                    source = FieldSource.OCR,
+                    serialPreview = corrected.take(12),
+                    confidence = candidate.confidence,
+                    notes = candidate.notes,
+                    matchedWithQr = null
+                )
+            )
+            return candidate
         }
 
         SIRIM_SERIAL_RELAXED.find(text)?.let { match ->
@@ -253,14 +292,23 @@ object SirimLabelParser {
             val penalty = if (notes.isNotEmpty()) CORRECTION_PENALTY else 0f
             val confidence = (RELAXED_SERIAL_CONFIDENCE - penalty).coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
             val noteSet = notes + FieldNote.PATTERN_RELAXED
-            return FieldConfidence(
+            val field = FieldConfidence(
                 value = corrected,
                 confidence = confidence,
                 source = FieldSource.OCR,
                 notes = noteSet
             )
+            ScanAnalytics.reportSerialExtraction(
+                SerialExtractionEvent(
+                    source = FieldSource.OCR,
+                    serialPreview = corrected.take(12),
+                    confidence = field.confidence,
+                    notes = field.notes,
+                    matchedWithQr = null
+                )
+            )
+            return field
         }
-
         TEA_SERIAL_PATTERN.find(text)?.let { match ->
             val digits = match.groupValues.getOrNull(1)?.filter(Char::isDigit)
             if (digits.isNullOrEmpty() || digits.length != 7) return@let
@@ -269,12 +317,22 @@ object SirimLabelParser {
             val penalty = if (notes.isNotEmpty()) CORRECTION_PENALTY else 0f
             val confidence = (LEGACY_SERIAL_CONFIDENCE - penalty).coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
             val noteSet = notes + FieldNote.PATTERN_RELAXED
-            return FieldConfidence(
+            val field = FieldConfidence(
                 value = corrected,
                 confidence = confidence,
                 source = FieldSource.OCR,
                 notes = noteSet
             )
+            ScanAnalytics.reportSerialExtraction(
+                SerialExtractionEvent(
+                    source = FieldSource.OCR,
+                    serialPreview = corrected.take(12),
+                    confidence = field.confidence,
+                    notes = field.notes,
+                    matchedWithQr = null
+                )
+            )
+            return field
         }
 
         return null
