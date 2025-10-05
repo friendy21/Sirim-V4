@@ -52,7 +52,7 @@ object ImagePreprocessor {
         mats += gray
         Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGB2GRAY)
 
-        val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
+        val clahe = Imgproc.createCLAHE(3.0, Size(8.0, 8.0))
         val equalized = Mat()
         mats += equalized
         clahe.apply(gray, equalized)
@@ -60,7 +60,7 @@ object ImagePreprocessor {
 
         val denoised = Mat()
         mats += denoised
-        Imgproc.bilateralFilter(equalized, denoised, 5, 75.0, 75.0)
+        Imgproc.bilateralFilter(equalized, denoised, 7, 100.0, 100.0)
 
         val sharpenKernel = Mat(3, 3, CvType.CV_32F)
         mats += sharpenKernel
@@ -81,8 +81,8 @@ object ImagePreprocessor {
             255.0,
             Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
             Imgproc.THRESH_BINARY,
-            31,
-            10.0
+            25,
+            8.0
         )
 
         val deskewed = deskew(thresholded)
