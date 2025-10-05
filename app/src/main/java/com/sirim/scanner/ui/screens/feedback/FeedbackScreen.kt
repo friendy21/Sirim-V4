@@ -42,7 +42,6 @@ import com.sirim.scanner.feedback.FeedbackManager
 import com.sirim.scanner.feedback.FeedbackSubmission
 import com.sirim.scanner.ui.model.ScanIssueReport
 import kotlin.text.StringBuilder
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,7 +89,7 @@ fun FeedbackScreen(
             Text(
                 text = "Spotted a label that refuses to scan? Tell us what happened so we can improve the recogniser.",
                 style = MaterialTheme.typography.bodyMedium
-            )
+            
             prefill?.let {
                 PrefilledContextCard(report = it)
             }
@@ -240,3 +239,4 @@ private fun buildPrefillDescription(report: ScanIssueReport): String {
     builder.append("Describe what went wrong: ")
     return builder.toString()
 }
+

@@ -308,7 +308,6 @@ object SirimLabelParser {
             )
             return field
         }
-
         TEA_SERIAL_PATTERN.find(text)?.let { match ->
             val digits = match.groupValues.getOrNull(1)?.filter(Char::isDigit)
             if (digits.isNullOrEmpty() || digits.length != 7) return@let
