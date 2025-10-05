@@ -25,6 +25,7 @@ import com.sirim.scanner.data.AppContainer
 import com.sirim.scanner.ui.screens.export.ExportScreen
 import com.sirim.scanner.ui.screens.export.ExportViewModel
 import com.sirim.scanner.ui.common.AuthenticationDialog
+import com.sirim.scanner.ui.screens.feedback.FeedbackScreen
 import com.sirim.scanner.ui.screens.records.RecordFormScreen
 import com.sirim.scanner.ui.screens.records.RecordListScreen
 import com.sirim.scanner.ui.screens.records.RecordViewModel
@@ -68,6 +69,7 @@ sealed class Destinations(val route: String) {
     data object RecordForm : Destinations("record_form")
     data object Export : Destinations("export")
     data object Settings : Destinations("settings")
+    data object Feedback : Destinations("feedback")
 }
 
 @Composable
@@ -214,6 +216,12 @@ private fun NavGraph(container: AppContainer, navController: NavHostController) 
                 },
                 onLogout = preferencesViewModel::logout,
                 onDismissAuthError = preferencesViewModel::clearAuthError,
+                onBack = { navController.popBackStack() },
+                onOpenFeedback = { navController.navigate(Destinations.Feedback.route) }
+            )
+        }
+        composable(Destinations.Feedback.route) {
+            FeedbackScreen(
                 onBack = { navController.popBackStack() }
             )
         }
