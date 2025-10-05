@@ -266,6 +266,7 @@ object SirimLabelParser {
             val penalty = if (notes.isNotEmpty()) CORRECTION_PENALTY else 0f
             val confidence = (EXACT_SERIAL_CONFIDENCE - penalty).coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
             val candidate = FieldConfidence(
+
                 value = corrected,
                 confidence = confidence,
                 source = FieldSource.OCR,
@@ -308,7 +309,6 @@ object SirimLabelParser {
             )
             return field
         }
-
         TEA_SERIAL_PATTERN.find(text)?.let { match ->
             val digits = match.groupValues.getOrNull(1)?.filter(Char::isDigit)
             if (digits.isNullOrEmpty() || digits.length != 7) return@let
