@@ -2,7 +2,11 @@ package com.sirim.scanner.data.ocr
 
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.SystemClock
 import androidx.camera.core.ImageProxy
+import com.sirim.scanner.analytics.PreprocessingMetricsEvent
+import com.sirim.scanner.analytics.ScanAnalytics
+import com.sirim.scanner.analytics.nanosecondsToMillis
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.max
@@ -39,6 +43,7 @@ object ImagePreprocessor {
     private const val MAX_DIMENSION = 960
 
     fun preprocess(imageProxy: ImageProxy): PreprocessedImage? {
+        val startNs = SystemClock.elapsedRealtimeNanos()
         val original = imageProxy.toBitmap()?.ensureMaxDimension(MAX_DIMENSION) ?: return null
         ensureOpenCv()
 
@@ -52,7 +57,7 @@ object ImagePreprocessor {
         mats += gray
         Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGB2GRAY)
 
-        val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
+        val clahe = Imgproc.createCLAHE(3.0, Size(8.0, 8.0))
         val equalized = Mat()
         mats += equalized
         clahe.apply(gray, equalized)
@@ -60,7 +65,7 @@ object ImagePreprocessor {
 
         val denoised = Mat()
         mats += denoised
-        Imgproc.bilateralFilter(equalized, denoised, 5, 75.0, 75.0)
+        Imgproc.bilateralFilter(equalized, denoised, 7, 100.0, 100.0)
 
         val sharpenKernel = Mat(3, 3, CvType.CV_32F)
         mats += sharpenKernel
@@ -81,8 +86,8 @@ object ImagePreprocessor {
             255.0,
             Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
             Imgproc.THRESH_BINARY,
-            31,
-            10.0
+            25,
+            8.0
         )
 
         val deskewed = deskew(thresholded)
@@ -104,6 +109,16 @@ object ImagePreprocessor {
         val region = roi?.let { Rect(it.x, it.y, it.width, it.height) }
 
         mats.forEach(Mat::release)
+
+        val durationMs = (SystemClock.elapsedRealtimeNanos() - startNs).nanosecondsToMillis()
+        ScanAnalytics.reportPreprocessingMetrics(
+            PreprocessingMetricsEvent(
+                durationMillis = durationMs,
+                inputWidth = original.width,
+                inputHeight = original.height,
+                roiDetected = roi != null
+            )
+        )
 
         return PreprocessedImage(
             original = original,
