@@ -14,6 +14,8 @@ import com.sirim.scanner.data.ocr.toJpegByteArray
 import com.sirim.scanner.data.repository.SirimRepository
 import com.sirim.scanner.data.validation.FieldValidator
 import com.sirim.scanner.data.validation.ValidationResult
+import com.sirim.scanner.ui.model.ScanDraft
+import java.util.LinkedHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,8 +51,8 @@ class ScannerViewModel private constructor(
     private val _ocrDebugInfo = MutableStateFlow(OcrDebugInfo())
     val ocrDebugInfo: StateFlow<OcrDebugInfo> = _ocrDebugInfo.asStateFlow()
 
-    private val _lastResultId = MutableStateFlow<Long?>(null)
-    val lastResultId: StateFlow<Long?> = _lastResultId.asStateFlow()
+    private val _lastSavedDraft = MutableStateFlow<ScanDraft?>(null)
+    val lastSavedDraft: StateFlow<ScanDraft?> = _lastSavedDraft.asStateFlow()
 
     private val _batchMode = MutableStateFlow(false)
     private val _batchQueue = MutableStateFlow<List<PendingRecord>>(emptyList())
@@ -104,6 +106,7 @@ class ScannerViewModel private constructor(
             val savedIds = mutableListOf<Long>()
             val skippedSerials = mutableListOf<String>()
             var totalConfidence = 0f
+            var lastDraft: ScanDraft? = null
             queued.forEach { pending ->
                 val duplicate = repository.findBySerial(pending.serial)
                 if (duplicate != null) {
@@ -115,10 +118,11 @@ class ScannerViewModel private constructor(
                 val id = repository.upsert(record)
                 savedIds += id
                 totalConfidence += pending.captureConfidence
+                lastDraft = pending.toDraft(id, imagePath)
             }
             _batchMode.value = false
             if (savedIds.isNotEmpty()) {
-                _lastResultId.value = savedIds.last()
+                _lastSavedDraft.value = lastDraft
             }
             val message = when {
                 savedIds.isNotEmpty() && skippedSerials.isNotEmpty() ->
@@ -311,12 +315,16 @@ class ScannerViewModel private constructor(
         val imagePath = pending.imageBytes?.let { repository.persistImage(it) }
         val record = pending.toRecord(imagePath)
         val id = repository.upsert(record)
-        _lastResultId.value = id
+        _lastSavedDraft.value = pending.toDraft(id, imagePath)
         _status.value = _status.value.copy(
             state = ScanState.Persisted,
             message = "Record saved (${pending.serial})",
             confidence = pending.captureConfidence
         )
+    }
+
+    fun clearLastSavedDraft() {
+        _lastSavedDraft.value = null
     }
 
     companion object {
@@ -398,8 +406,26 @@ private data class PendingRecord(
         rating = fields["rating"]?.value.orEmpty(),
         size = fields["size"]?.value.orEmpty(),
         imagePath = imagePath,
+        customFields = null,
+        captureConfidence = captureConfidence,
         createdAt = timestamp,
         isVerified = false
     )
+
+    fun toDraft(recordId: Long, imagePath: String?): ScanDraft {
+        val values = LinkedHashMap<String, String>()
+        val confidences = LinkedHashMap<String, Float>()
+        fields.forEach { (key, confidence) ->
+            values[key] = confidence.value
+            confidences[key] = confidence.confidence
+        }
+        return ScanDraft(
+            recordId = recordId,
+            fieldValues = values,
+            fieldConfidences = confidences,
+            captureConfidence = captureConfidence,
+            imagePath = imagePath
+        )
+    }
 }
 

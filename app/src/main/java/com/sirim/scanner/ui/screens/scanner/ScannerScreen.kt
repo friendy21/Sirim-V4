@@ -76,6 +76,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.sirim.scanner.data.ocr.FieldConfidence
 import com.sirim.scanner.data.ocr.SirimLabelParser
+import com.sirim.scanner.ui.model.ScanDraft
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
@@ -84,7 +85,7 @@ import kotlin.math.roundToInt
 fun ScannerScreen(
     viewModel: ScannerViewModel,
     onBack: () -> Unit,
-    onRecordSaved: (Long) -> Unit
+    onRecordSaved: (ScanDraft) -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
@@ -92,7 +93,7 @@ fun ScannerScreen(
     val fields by viewModel.extractedFields.collectAsState()
     val warnings by viewModel.validationWarnings.collectAsState()
     val errors by viewModel.validationErrors.collectAsState()
-    val lastRecordId by viewModel.lastResultId.collectAsState()
+    val lastDraft by viewModel.lastSavedDraft.collectAsState()
     val batchUiState by viewModel.batchUiState.collectAsState()
     val ocrDebugInfo by viewModel.ocrDebugInfo.collectAsState()
     val hasCameraPermission by remember {
@@ -111,8 +112,11 @@ fun ScannerScreen(
         }
     }
 
-    LaunchedEffect(lastRecordId) {
-        lastRecordId?.let(onRecordSaved)
+    LaunchedEffect(lastDraft) {
+        lastDraft?.let {
+            onRecordSaved(it)
+            viewModel.clearLastSavedDraft()
+        }
     }
 
     Scaffold(

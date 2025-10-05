@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,25 +37,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import com.sirim.scanner.data.ocr.SirimLabelParser
 import com.sirim.scanner.feedback.FeedbackManager
 import com.sirim.scanner.feedback.FeedbackSubmission
-import kotlinx.coroutines.launch
+import com.sirim.scanner.ui.model.ScanIssueReport
+import kotlin.text.StringBuilder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedbackScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    prefill: ScanIssueReport? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    val defaultDescription = remember(prefill) { prefill?.let(::buildPrefillDescription).orEmpty() }
     var descriptionState by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue())
+        mutableStateOf(TextFieldValue(defaultDescription))
     }
     var contactState by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue())
     }
-    var includeDiagnostics by rememberSaveable { mutableStateOf(true) }
+    var includeDiagnostics by rememberSaveable { mutableStateOf(prefill?.imagePath != null) }
     var isSubmitting by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -83,7 +89,10 @@ fun FeedbackScreen(
             Text(
                 text = "Spotted a label that refuses to scan? Tell us what happened so we can improve the recogniser.",
                 style = MaterialTheme.typography.bodyMedium
-            )
+            
+            prefill?.let {
+                PrefilledContextCard(report = it)
+            }
             OutlinedTextField(
                 value = descriptionState,
                 onValueChange = { descriptionState = it },
@@ -148,10 +157,13 @@ fun FeedbackScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (descriptionState.text.isBlank()) {
-            snackbarHostState.currentSnackbarData?.dismiss()
+    LaunchedEffect(prefill) {
+        if (prefill != null && descriptionState.text.isBlank()) {
+            descriptionState = TextFieldValue(defaultDescription)
         }
+    }
+    LaunchedEffect(Unit) {
+        snackbarHostState.currentSnackbarData?.dismiss()
     }
 }
 
@@ -176,3 +188,55 @@ private fun RowWithCheckbox(
         }
     }
 }
+
+@Composable
+private fun PrefilledContextCard(report: ScanIssueReport) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Attached scan details", style = MaterialTheme.typography.titleSmall)
+            report.serial?.let {
+                Text("Serial: $it", style = MaterialTheme.typography.bodyMedium)
+            }
+            report.captureConfidence?.let {
+                Text(
+                    "Confidence: ${(it * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            if (report.fieldValues.isNotEmpty()) {
+                Text("Captured fields:", style = MaterialTheme.typography.bodySmall)
+                report.fieldValues.entries.sortedBy { it.key }.forEach { (key, value) ->
+                    val label = SirimLabelParser.prettifyKey(key)
+                    Text("• $label: ${value.ifBlank { "—" }}", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Text(
+                text = if (report.imagePath != null) "Label snapshot included" else "No image available",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+private fun buildPrefillDescription(report: ScanIssueReport): String {
+    val builder = StringBuilder()
+    report.serial?.let { builder.appendLine("Serial: $it") }
+    report.captureConfidence?.let {
+        val pct = (it * 100).coerceIn(0f, 100f)
+        builder.appendLine("Scanner confidence: ${"%.1f".format(pct)}%")
+    }
+    if (report.fieldValues.isNotEmpty()) {
+        builder.appendLine("Captured values:")
+        report.fieldValues.forEach { (key, value) ->
+            val label = SirimLabelParser.prettifyKey(key)
+            builder.appendLine("- $label: ${value.ifBlank { "(blank)" }}")
+        }
+    }
+    builder.appendLine()
+    builder.append("Describe what went wrong: ")
+    return builder.toString()
+}
+
