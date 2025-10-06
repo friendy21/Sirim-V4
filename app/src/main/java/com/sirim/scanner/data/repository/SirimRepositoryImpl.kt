@@ -90,4 +90,33 @@ class SirimRepositoryImpl(
             file.absolutePath
         }
     }
+
+    // Database management methods implementation
+    override fun getAllDatabases(): Flow<List<com.sirim.scanner.data.db.DatabaseRecord>> {
+        // TODO: Implement when DatabaseRecordDao is available
+        return kotlinx.coroutines.flow.flowOf(emptyList())
+    }
+
+    override suspend fun getDatabaseById(id: Long): com.sirim.scanner.data.db.DatabaseRecord? {
+        // TODO: Implement when DatabaseRecordDao is available
+        return null
+    }
+
+    override suspend fun insertDatabase(database: com.sirim.scanner.data.db.DatabaseRecord): Long {
+        // TODO: Implement when DatabaseRecordDao is available
+        return 0L
+    }
+
+    override suspend fun updateDatabase(database: com.sirim.scanner.data.db.DatabaseRecord) {
+        // TODO: Implement when DatabaseRecordDao is available
+    }
+
+    override suspend fun deleteDatabase(id: Long) {
+        // TODO: Implement when DatabaseRecordDao is available
+    }
+
+    override fun getRecordsByDatabase(databaseId: Long): Flow<List<SirimRecord>> {
+        // TODO: Implement when database relationship is established
+        return sirimRecords
+    }
 }

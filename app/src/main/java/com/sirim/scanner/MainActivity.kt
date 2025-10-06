@@ -65,9 +65,17 @@ class MainActivity : ComponentActivity() {
 sealed class Destinations(val route: String) {
     data object StartupResolver : Destinations("startup_resolver")
     data object Startup : Destinations("startup")
+    data object Welcome : Destinations("welcome")
     data object SirimScanner : Destinations("sirim_scanner")
     data object SkuScanner : Destinations("sku_scanner")
+    data object SkuPreview : Destinations("sku_preview")
+    data object SkuDetails : Destinations("sku_details")
+    data object DatabaseCreation : Destinations("database_creation")
     data object Storage : Destinations("storage")
+    data object DatabaseList : Destinations("database_list")
+    data object DatabaseView : Destinations("database_view/{databaseId}") {
+        fun createRoute(databaseId: Long) = "database_view/$databaseId"
+    }
     data object RecordForm : Destinations("record_form")
     data object Export : Destinations("export")
     data object Settings : Destinations("settings")
@@ -126,6 +134,17 @@ private fun NavGraph(container: AppContainer, navController: NavHostController) 
                     popUpTo(Destinations.StartupResolver.route) { inclusive = true }
                 }
             }
+        }
+        
+        // Welcome Screen (First-time users)
+        composable(Destinations.Welcome.route) {
+            com.sirim.scanner.ui.screens.welcome.WelcomeScreen(
+                onPermissionGranted = {
+                    navController.navigate(Destinations.SkuScanner.route) {
+                        popUpTo(Destinations.Welcome.route) { inclusive = true }
+                    }
+                }
+            )
         }
         composable(Destinations.Startup.route) {
             StartupScreen(
