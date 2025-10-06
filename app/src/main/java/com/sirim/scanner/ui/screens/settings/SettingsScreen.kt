@@ -50,7 +50,8 @@ fun SettingsScreen(
     onAuthenticate: (String, String) -> Unit,
     onLogout: () -> Unit,
     onDismissAuthError: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenFeedback: () -> Unit
 ) {
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -102,7 +103,7 @@ fun SettingsScreen(
                 onDismissError = onDismissAuthError
             )
 
-            AboutCard()
+            AboutCard(onOpenFeedback = onOpenFeedback)
         }
     }
 }
@@ -259,7 +260,7 @@ private fun ErrorMessage(message: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun AboutCard() {
+private fun AboutCard(onOpenFeedback: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -277,6 +278,12 @@ private fun AboutCard() {
                     Text(text = "SIRIM Scanner v2", fontWeight = FontWeight.SemiBold)
                     Text(text = "Build ${BuildConfig.VERSION_NAME}", color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+            Button(
+                onClick = onOpenFeedback,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Send feedback")
             }
         }
     }

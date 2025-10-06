@@ -1,5 +1,4 @@
 package com.sirim.scanner.data.ocr
-
 import android.graphics.Rect
 import java.util.Locale
 import kotlin.math.min
@@ -24,6 +23,7 @@ object SirimLabelParser {
         'O' to '0',
         'o' to '0',
         'I' to '1',
+        'i' to '1',
         'l' to '1',
         'i' to '1',
         'S' to '5',
@@ -73,7 +73,7 @@ object SirimLabelParser {
 
         // Extract serial number
         extractSerial(normalized)?.let { serial ->
-            candidates["sirimSerialNo"] = serial
+            candidates[SERIAL_FIELD_KEY] = serial
         }
 
         // Extract other fields
@@ -89,6 +89,7 @@ object SirimLabelParser {
                         }
                     }
                 }
+                break@specLoop
             }
         }
 
@@ -115,8 +116,12 @@ object SirimLabelParser {
             source = FieldSource.QR,
             notes = corrected.second
         )
+        val correctionPenalty = if (correctionNotes.isNotEmpty()) CORRECTION_PENALTY else 0f
+        val qrConfidenceValue = (QR_BASE_CONFIDENCE - correctionPenalty)
+            .coerceIn(MIN_CONFIDENCE, VERIFIED_CONFIDENCE)
+        val baseNotes = correctionNotes.toMutableSet()
 
-        val existing = current["sirimSerialNo"]
+        val existing = current[SERIAL_FIELD_KEY]
         if (existing != null) {
             // Verify QR matches OCR
             if (existing.value.equals(qrSerial, ignoreCase = true)) {
@@ -192,7 +197,7 @@ object SirimLabelParser {
     private fun buildCandidate(
         field: String,
         rawValue: String,
-        primaryPattern: Boolean
+        spec: FieldPatternSpec
     ): FieldConfidence {
         val (corrected, notes) = correctCharacters(rawValue)
         val (trimmed, wasTrimmed) = enforceLength(field, corrected)
@@ -216,12 +221,9 @@ object SirimLabelParser {
         )
     }
 
-    /**
-     * Enforce maximum field lengths.
-     */
     private fun enforceLength(field: String, value: String): Pair<String, Boolean> {
         val limit = when (field) {
-            "sirimSerialNo" -> 12
+            SERIAL_FIELD_KEY -> 12
             "batchNo" -> 200
             "brandTrademark" -> 1024
             "model", "type", "size" -> 1500
@@ -234,7 +236,6 @@ object SirimLabelParser {
             value to false
         }
     }
-
     /**
      * Correct common OCR character mistakes.
      */

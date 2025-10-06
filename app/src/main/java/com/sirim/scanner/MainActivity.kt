@@ -25,6 +25,9 @@ import com.sirim.scanner.data.AppContainer
 import com.sirim.scanner.ui.screens.export.ExportScreen
 import com.sirim.scanner.ui.screens.export.ExportViewModel
 import com.sirim.scanner.ui.common.AuthenticationDialog
+import com.sirim.scanner.ui.model.ScanDraft
+import com.sirim.scanner.ui.model.ScanIssueReport
+import com.sirim.scanner.ui.screens.feedback.FeedbackScreen
 import com.sirim.scanner.ui.screens.records.RecordFormScreen
 import com.sirim.scanner.ui.screens.records.RecordListScreen
 import com.sirim.scanner.ui.screens.records.RecordViewModel
@@ -68,6 +71,7 @@ sealed class Destinations(val route: String) {
     data object RecordForm : Destinations("record_form")
     data object Export : Destinations("export")
     data object Settings : Destinations("settings")
+    data object Feedback : Destinations("feedback")
 }
 
 @Composable
@@ -142,10 +146,11 @@ private fun NavGraph(container: AppContainer, navController: NavHostController) 
             ScannerScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
-                onRecordSaved = { id ->
-                    navController.navigate("${Destinations.RecordForm.route}?recordId=$id") {
+                onRecordSaved = { draft ->
+                    navController.navigate("${Destinations.RecordForm.route}?recordId=${draft.recordId}") {
                         popUpTo(Destinations.SirimScanner.route) { inclusive = true }
                     }
+                    navController.getBackStackEntry(Destinations.RecordForm.route).savedStateHandle["scan_draft"] = draft
                 }
             )
         }
@@ -186,13 +191,24 @@ private fun NavGraph(container: AppContainer, navController: NavHostController) 
             val viewModel: RecordViewModel = viewModel(
                 factory = RecordViewModel.Factory(container.repository)
             )
+            val scanDraft = navController.currentBackStackEntry?.savedStateHandle?.remove<ScanDraft>("scan_draft")
             RecordFormScreen(
                 viewModel = viewModel,
-                onSaved = {
-                    navController.popBackStack()
-                },
+                onSaved = { _: Long -> navController.popBackStack() },
                 onBack = { navController.popBackStack() },
-                recordId = backStackEntry.arguments?.getLong("recordId")?.takeIf { it > 0 }
+                onRetake = if (scanDraft != null) {
+                    {
+                        navController.navigate(Destinations.SirimScanner.route) {
+                            popUpTo(Destinations.RecordForm.route) { inclusive = true }
+                        }
+                    }
+                } else null,
+                onReportIssue = { report ->
+                    navController.currentBackStackEntry?.savedStateHandle?.set("feedback_prefill", report)
+                    navController.navigate(Destinations.Feedback.route)
+                },
+                recordId = backStackEntry.arguments?.getLong("recordId")?.takeIf { it > 0 },
+                scanDraft = scanDraft
             )
         }
         composable(Destinations.Export.route) {
@@ -214,7 +230,15 @@ private fun NavGraph(container: AppContainer, navController: NavHostController) 
                 },
                 onLogout = preferencesViewModel::logout,
                 onDismissAuthError = preferencesViewModel::clearAuthError,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenFeedback = { navController.navigate(Destinations.Feedback.route) }
+            )
+        }
+        composable(Destinations.Feedback.route) {
+            val prefill = navController.previousBackStackEntry?.savedStateHandle?.remove<ScanIssueReport>("feedback_prefill")
+            FeedbackScreen(
+                onBack = { navController.popBackStack() },
+                prefill = prefill
             )
         }
     }
