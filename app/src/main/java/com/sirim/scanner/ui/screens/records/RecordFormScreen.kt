@@ -16,10 +16,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Feedback
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -80,6 +83,7 @@ fun RecordFormScreen(
     var fieldIdCounter by rememberSaveable { mutableStateOf(0L) }
     var showAddFieldDialog by rememberSaveable { mutableStateOf(false) }
 
+    val fieldConfidences = scanDraft?.fieldConfidences ?: emptyMap()
     fun resetStates() {
         serialState.value = TextFieldValue("")
         batchState.value = TextFieldValue("")
@@ -229,69 +233,75 @@ fun RecordFormScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            OutlinedTextField(
+            FieldInput(
                 value = serialState.value,
                 onValueChange = {
                     serialState.value = it
                     viewModel.clearFormError()
                 },
-                label = { Text("SIRIM Serial No. *") },
+                label = "SIRIM Serial No. *",
                 supportingText = {
                     Text("T + 9 digits, no spaces", style = MaterialTheme.typography.bodySmall)
                 },
                 isError = formError != null,
-                trailingIcon = {
-                    if (formError != null) {
-                        Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                trailingIcon = if (formError != null) {
+                    {
+                        Icon(
+                            Icons.Default.Error,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
+                } else {
+                    null
                 },
-                modifier = Modifier.fillMaxWidth()
+                confidence = fieldConfidences["sirimSerialNo"]
             )
             formError?.let { error ->
                 Text(text = error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
 
-            OutlinedTextField(
+            FieldInput(
                 value = batchState.value,
                 onValueChange = { batchState.value = it },
-                label = { Text("Batch No.") },
+                label = "Batch No.",
                 supportingText = { Text("Max 200 characters") },
-                modifier = Modifier.fillMaxWidth()
+                confidence = fieldConfidences["batchNo"]
             )
-            OutlinedTextField(
+            FieldInput(
                 value = brandState.value,
                 onValueChange = { brandState.value = it },
-                label = { Text("Brand/Trademark") },
+                label = "Brand/Trademark",
                 supportingText = { Text("Max 1024 characters") },
-                modifier = Modifier.fillMaxWidth()
+                confidence = fieldConfidences["brandTrademark"]
             )
-            OutlinedTextField(
+            FieldInput(
                 value = modelState.value,
                 onValueChange = { modelState.value = it },
-                label = { Text("Model") },
+                label = "Model",
                 supportingText = { Text("Max 1500 characters") },
-                modifier = Modifier.fillMaxWidth()
+                confidence = fieldConfidences["model"]
             )
-            OutlinedTextField(
+            FieldInput(
                 value = typeState.value,
                 onValueChange = { typeState.value = it },
-                label = { Text("Type") },
+                label = "Type",
                 supportingText = { Text("Max 1500 characters") },
-                modifier = Modifier.fillMaxWidth()
+                confidence = fieldConfidences["type"]
             )
-            OutlinedTextField(
+            FieldInput(
                 value = ratingState.value,
                 onValueChange = { ratingState.value = it },
-                label = { Text("Rating") },
+                label = "Rating",
                 supportingText = { Text("Max 600 characters") },
-                modifier = Modifier.fillMaxWidth()
+                confidence = fieldConfidences["rating"]
             )
-            OutlinedTextField(
+            FieldInput(
                 value = sizeState.value,
                 onValueChange = { sizeState.value = it },
-                label = { Text("Size") },
+                label = "Size",
                 supportingText = { Text("Max 1500 characters") },
-                modifier = Modifier.fillMaxWidth()
+                confidence = fieldConfidences["size"]
             )
 
             if (customFields.isNotEmpty()) {
@@ -434,6 +444,68 @@ fun RecordFormScreen(
 }
 
 @Composable
+private fun FieldInput(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    label: String,
+    supportingText: (@Composable (() -> Unit))? = null,
+    isError: Boolean = false,
+    trailingIcon: (@Composable (() -> Unit))? = null,
+    confidence: Float?
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            supportingText = supportingText,
+            isError = isError,
+            trailingIcon = trailingIcon,
+            modifier = Modifier.fillMaxWidth()
+        )
+        FieldConfidenceIndicator(confidence)
+    }
+}
+
+@Composable
+private fun FieldConfidenceIndicator(confidence: Float?, modifier: Modifier = Modifier) {
+    confidence ?: return
+    val normalized = confidence.coerceIn(0f, 1f)
+    val percentage = (normalized * 100).roundToInt()
+    val (icon, tint, label) = when {
+        normalized >= 0.9f -> Triple(Icons.Default.CheckCircle, MaterialTheme.colorScheme.tertiary, "High confidence")
+        normalized >= 0.7f -> Triple(Icons.Default.Info, MaterialTheme.colorScheme.secondary, "Moderate confidence")
+        else -> Triple(Icons.Default.Warning, MaterialTheme.colorScheme.error, "Low confidence")
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "$label • ${percentage}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = tint
+            )
+        }
+        LinearProgressIndicator(
+            progress = normalized,
+            modifier = Modifier.fillMaxWidth(),
+            color = tint,
+            trackColor = tint.copy(alpha = 0.2f)
+        )
+    }
+}
+
+@Composable
 private fun AutoFillIndicator(
     captureConfidence: Float?,
     onRetake: (() -> Unit)?,
@@ -478,6 +550,215 @@ private fun AutoFillIndicator(
             }
         }
     }
+
+    if (showAddFieldDialog) {
+        AddCustomFieldDialog(
+            onDismiss = { showAddFieldDialog = false },
+            onAdd = { name, maxLength ->
+                if (name.isNotBlank()) {
+                    fieldIdCounter += 1
+                    customFields += CustomFieldUiState(
+                        id = fieldIdCounter,
+                        name = name.trim(),
+                        maxLength = maxLength,
+                        value = TextFieldValue("")
+                    )
+                }
+                showAddFieldDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun AutoFillIndicator(
+    captureConfidence: Float?,
+    onRetake: (() -> Unit)?,
+    onReportIssue: (() -> Unit)?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Fields auto-filled from scan. Review and edit as needed.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            captureConfidence?.let {
+                val percentage = (it.coerceIn(0f, 1f) * 100).roundToInt()
+                LinearProgressIndicator(
+                    progress = it.coerceIn(0f, 1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                )
+                Text("Capture confidence: $percentage%", style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (onRetake != null) {
+                    TextButton(onClick = onRetake) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Retake")
+                    }
+                }
+                if (onReportIssue != null) {
+                    TextButton(onClick = onReportIssue) {
+                        Icon(Icons.Default.Feedback, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Report issue")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomFieldRow(
+    field: CustomFieldUiState,
+    onValueChange: (TextFieldValue) -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        OutlinedTextField(
+            value = field.value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            label = { Text(field.name) },
+            supportingText = { Text("Max ${field.maxLength} characters") }
+        )
+        IconButton(onClick = onDelete, modifier = Modifier.padding(top = 8.dp)) {
+            Icon(Icons.Default.Delete, contentDescription = "Remove field")
+        }
+    }
+}
+
+@Composable
+private fun AddCustomFieldDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String, Int) -> Unit
+) {
+    var fieldName by remember { mutableStateOf(TextFieldValue()) }
+    var maxLength by remember { mutableStateOf(TextFieldValue("500")) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Custom Field") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = fieldName,
+                    onValueChange = { fieldName = it },
+                    label = { Text("Field name") },
+                    placeholder = { Text("e.g. Manufacturer") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = maxLength,
+                    onValueChange = {
+                        val digits = it.text.filter(Char::isDigit)
+                        maxLength = TextFieldValue(digits)
+                    },
+                    label = { Text("Max length") },
+                    placeholder = { Text("500") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val length = maxLength.text.toIntOrNull()?.coerceAtLeast(1) ?: 500
+                    onAdd(fieldName.text, length)
+                },
+                enabled = fieldName.text.isNotBlank()
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+private data class CustomFieldUiState(
+    val id: Long,
+    val name: String,
+    val maxLength: Int,
+    val value: TextFieldValue
+) {
+    fun toEntry(): CustomFieldEntry? {
+        val trimmedValue = value.text.trim()
+        if (name.isBlank() && trimmedValue.isBlank()) return null
+        return CustomFieldEntry(
+            name = name,
+            value = trimmedValue.take(maxLength),
+            maxLength = maxLength
+        )
+    }
+}
+
+private fun applyDraftToStates(
+    draft: ScanDraft,
+    serialState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    batchState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    brandState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    modelState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    typeState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    ratingState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    sizeState: androidx.compose.runtime.MutableState<TextFieldValue>
+) {
+    val values = draft.fieldValues
+    serialState.value = TextFieldValue(values["sirimSerialNo"].orEmpty())
+    batchState.value = TextFieldValue(values["batchNo"].orEmpty())
+    brandState.value = TextFieldValue(values["brandTrademark"].orEmpty())
+    modelState.value = TextFieldValue(values["model"].orEmpty())
+    typeState.value = TextFieldValue(values["type"].orEmpty())
+    ratingState.value = TextFieldValue(values["rating"].orEmpty())
+    sizeState.value = TextFieldValue(values["size"].orEmpty())
+}
+
+private fun buildScanIssueReport(
+    record: SirimRecord?,
+    scanDraft: ScanDraft?,
+    serial: String,
+    batch: String,
+    brand: String,
+    model: String,
+    type: String,
+    rating: String,
+    size: String,
+    customFields: List<CustomFieldUiState>,
+    captureConfidence: Float?,
+    imagePath: String?
+): ScanIssueReport {
+    val values = LinkedHashMap<String, String>()
+    values["sirimSerialNo"] = serial
+    values["batchNo"] = batch
+    values["brandTrademark"] = brand
+    values["model"] = model
+    values["type"] = type
+    values["rating"] = rating
+    values["size"] = size
+    customFields.forEach { field ->
+        values[field.name] = field.value.text
+    }
+    return ScanIssueReport(
+        recordId = record?.id ?: scanDraft?.recordId,
+        serial = serial.ifBlank { scanDraft?.serial ?: record?.sirimSerialNo },
+        captureConfidence = captureConfidence,
+        fieldValues = values,
+        imagePath = imagePath
+    )
 }
 
 @Composable
