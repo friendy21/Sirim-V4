@@ -34,6 +34,10 @@ data class SirimRecord(
     val size: String,
     @ColumnInfo(name = "image_path")
     val imagePath: String?,
+    @ColumnInfo(name = "custom_fields")
+    val customFields: String? = null,
+    @ColumnInfo(name = "capture_confidence")
+    val captureConfidence: Float? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "is_verified")
