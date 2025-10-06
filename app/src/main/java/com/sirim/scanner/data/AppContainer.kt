@@ -41,6 +41,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         SirimRepositoryImpl(
             sirimDao = database.sirimRecordDao(),
             skuDao = database.skuRecordDao(),
+            databaseDao = database.databaseRecordDao(),
             context = context.applicationContext
         )
     }

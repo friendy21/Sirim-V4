@@ -4,7 +4,10 @@ data class UserPreferences(
     val startupPage: StartupPage = StartupPage.AskEveryTime,
     val isAuthenticated: Boolean = false,
     val authTimestamp: Long = 0L,
-    val authExpiryDurationMillis: Long = PreferencesManager.DEFAULT_AUTH_EXPIRY_MILLIS
+    val authExpiryDurationMillis: Long = PreferencesManager.DEFAULT_AUTH_EXPIRY_MILLIS,
+    val isFirstTime: Boolean = true,
+    val lastActiveDatabaseId: Long? = null,
+    val lastActiveSkuRecordId: Long? = null
 ) {
     fun isSessionValid(nowMillis: Long = System.currentTimeMillis()): Boolean {
         if (!isAuthenticated) return false
@@ -15,6 +18,10 @@ data class UserPreferences(
     fun remainingSessionTimeMillis(nowMillis: Long = System.currentTimeMillis()): Long {
         val expiryAt = authTimestamp + authExpiryDurationMillis
         return (expiryAt - nowMillis).coerceAtLeast(0L)
+    }
+    
+    fun hasActiveSession(): Boolean {
+        return lastActiveDatabaseId != null && lastActiveSkuRecordId != null
     }
 }
 

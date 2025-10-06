@@ -2,6 +2,7 @@ package com.sirim.scanner.data.repository
 
 import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
+import com.sirim.scanner.data.db.DatabaseRecordDao
 import com.sirim.scanner.data.db.SirimRecord
 import com.sirim.scanner.data.db.SirimRecordDao
 import com.sirim.scanner.data.db.SkuRecord
@@ -21,6 +22,7 @@ import kotlinx.coroutines.withContext
 class SirimRepositoryImpl(
     private val sirimDao: SirimRecordDao,
     private val skuDao: SkuRecordDao,
+    private val databaseDao: DatabaseRecordDao,
     private val context: Context
 ) : SirimRepository {
 
@@ -93,30 +95,37 @@ class SirimRepositoryImpl(
 
     // Database management methods implementation
     override fun getAllDatabases(): Flow<List<com.sirim.scanner.data.db.DatabaseRecord>> {
-        // TODO: Implement when DatabaseRecordDao is available
-        return kotlinx.coroutines.flow.flowOf(emptyList())
+        return databaseDao.getAllDatabases()
     }
 
     override suspend fun getDatabaseById(id: Long): com.sirim.scanner.data.db.DatabaseRecord? {
-        // TODO: Implement when DatabaseRecordDao is available
-        return null
+        return databaseDao.getDatabaseById(id)
     }
 
     override suspend fun insertDatabase(database: com.sirim.scanner.data.db.DatabaseRecord): Long {
-        // TODO: Implement when DatabaseRecordDao is available
-        return 0L
+        return databaseDao.upsert(database)
     }
 
     override suspend fun updateDatabase(database: com.sirim.scanner.data.db.DatabaseRecord) {
-        // TODO: Implement when DatabaseRecordDao is available
+        databaseDao.update(database)
     }
 
     override suspend fun deleteDatabase(id: Long) {
-        // TODO: Implement when DatabaseRecordDao is available
+        databaseDao.getDatabaseById(id)?.let { database ->
+            // Delete associated records
+            sirimDao.getRecordsByDatabase(id).forEach { record ->
+                delete(record)
+            }
+            // Delete database file if exists
+            database.filePath?.let { path ->
+                runCatching { File(path).takeIf(File::exists)?.delete() }
+            }
+            // Delete database record
+            databaseDao.delete(database)
+        }
     }
 
     override fun getRecordsByDatabase(databaseId: Long): Flow<List<SirimRecord>> {
-        // TODO: Implement when database relationship is established
-        return sirimRecords
+        return sirimDao.getRecordsByDatabase(databaseId)
     }
 }

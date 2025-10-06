@@ -60,12 +60,44 @@ class PreferencesManager(private val context: Context) {
         val authenticated = this[Keys.IS_AUTHENTICATED] ?: false
         val timestamp = this[Keys.AUTH_TIMESTAMP] ?: 0L
         val expiryDuration = this[Keys.AUTH_EXPIRY_DURATION] ?: DEFAULT_AUTH_EXPIRY_MILLIS
+        val isFirstTime = this[Keys.IS_FIRST_TIME] ?: true
+        val lastActiveDatabaseId = this[Keys.LAST_ACTIVE_DATABASE_ID]
+        val lastActiveSkuRecordId = this[Keys.LAST_ACTIVE_SKU_RECORD_ID]
+        
         return UserPreferences(
             startupPage = startupPage,
             isAuthenticated = authenticated,
             authTimestamp = timestamp,
-            authExpiryDurationMillis = expiryDuration
+            authExpiryDurationMillis = expiryDuration,
+            isFirstTime = isFirstTime,
+            lastActiveDatabaseId = lastActiveDatabaseId,
+            lastActiveSkuRecordId = lastActiveSkuRecordId
         )
+    }
+
+    suspend fun setFirstTimeLaunched() {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.IS_FIRST_TIME] = false
+        }
+    }
+
+    suspend fun setLastActiveDatabaseId(databaseId: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_ACTIVE_DATABASE_ID] = databaseId
+        }
+    }
+
+    suspend fun setLastActiveSkuRecordId(skuRecordId: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_ACTIVE_SKU_RECORD_ID] = skuRecordId
+        }
+    }
+
+    suspend fun clearSession() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.LAST_ACTIVE_DATABASE_ID)
+            prefs.remove(Keys.LAST_ACTIVE_SKU_RECORD_ID)
+        }
     }
 
     private object Keys {
@@ -73,6 +105,9 @@ class PreferencesManager(private val context: Context) {
         val IS_AUTHENTICATED = booleanPreferencesKey("is_authenticated")
         val AUTH_TIMESTAMP = longPreferencesKey("auth_timestamp")
         val AUTH_EXPIRY_DURATION = longPreferencesKey("auth_expiry_duration")
+        val IS_FIRST_TIME = booleanPreferencesKey("is_first_time")
+        val LAST_ACTIVE_DATABASE_ID = longPreferencesKey("last_active_database_id")
+        val LAST_ACTIVE_SKU_RECORD_ID = longPreferencesKey("last_active_sku_record_id")
     }
 
     companion object {
