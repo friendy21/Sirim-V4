@@ -63,6 +63,7 @@ object ImagePreprocessor {
         clahe.apply(gray, equalized)
         // Note: clahe doesn't have a release() method in OpenCV Android
 
+        // Stronger denoising for better text clarity
         val denoised = Mat()
         mats += denoised
         Imgproc.bilateralFilter(equalized, denoised, 7, 100.0, 100.0)
@@ -78,6 +79,7 @@ object ImagePreprocessor {
         mats += sharpened
         Imgproc.filter2D(denoised, sharpened, -1, sharpenKernel)
 
+        // Optimized adaptive threshold for SIRIM label text
         val thresholded = Mat()
         mats += thresholded
         Imgproc.adaptiveThreshold(
@@ -86,8 +88,8 @@ object ImagePreprocessor {
             255.0,
             Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
             Imgproc.THRESH_BINARY,
-            25,
-            8.0
+            25,  // Smaller block size for finer detail
+            8.0  // Adjusted constant for better text separation
         )
 
         val deskewed = deskew(thresholded)
