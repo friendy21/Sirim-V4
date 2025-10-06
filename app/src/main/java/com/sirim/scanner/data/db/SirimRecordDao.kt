@@ -20,6 +20,9 @@ interface SirimRecordDao {
     
     @Query("SELECT * FROM sirim_records WHERE sku_record_id = :skuRecordId ORDER BY created_at DESC")
     fun getRecordsBySkuId(skuRecordId: Long): Flow<List<SirimRecord>>
+    
+    @Query("SELECT * FROM sirim_records WHERE sku_record_id = :databaseId ORDER BY created_at DESC")
+    fun getRecordsByDatabase(databaseId: Long): Flow<List<SirimRecord>>
 
     @Query(
         "SELECT * FROM sirim_records WHERE sirim_serial_no LIKE :query OR batch_no LIKE :query OR brand_trademark LIKE :query OR model LIKE :query ORDER BY created_at DESC"

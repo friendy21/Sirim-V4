@@ -1,5 +1,6 @@
 package com.sirim.scanner.data.repository
 
+import com.sirim.scanner.data.db.DatabaseRecord
 import com.sirim.scanner.data.db.SirimRecord
 import com.sirim.scanner.data.db.SkuRecord
 import com.sirim.scanner.data.db.StorageRecord
@@ -32,4 +33,12 @@ interface SirimRepository {
     suspend fun findByBarcode(barcode: String): SkuRecord?
 
     suspend fun persistImage(bytes: ByteArray, extension: String = "jpg"): String
+    
+    // Database management methods
+    fun getAllDatabases(): Flow<List<DatabaseRecord>>
+    suspend fun getDatabaseById(id: Long): DatabaseRecord?
+    suspend fun insertDatabase(database: DatabaseRecord): Long
+    suspend fun updateDatabase(database: DatabaseRecord)
+    suspend fun deleteDatabase(id: Long)
+    fun getRecordsByDatabase(databaseId: Long): Flow<List<SirimRecord>>
 }
