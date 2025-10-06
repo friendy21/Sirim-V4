@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "com.sirim.scanner"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.sirim.scanner"
-        minSdk = 33
-        targetSdk = 36
+        minSdk = 24
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -29,7 +29,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -49,19 +49,15 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true
-        }
     }
 
     packaging {
@@ -86,13 +82,14 @@ android {
     }
 
 }
-    kapt {
-        correctErrorTypes = true
-        useBuildCache = true
-    }
+
+kapt {
+    correctErrorTypes = true
+    useBuildCache = true
+}
 dependencies {
     // Desugared JDK
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4") // keep; latest broadly used & stable
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     // Jetpack Compose — use BOM to pin all compose* + Material3
     implementation(platform("androidx.compose:compose-bom:2025.09.01"))
@@ -100,7 +97,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
-    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.activity:activity-compose:1.11.0")
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -127,31 +124,32 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
 
     // Room
-    implementation("androidx.room:room-runtime:2.7.0")
-    kapt("androidx.room:room-compiler:2.7.0")
-    implementation("androidx.room:room-ktx:2.7.0")
+    implementation("androidx.room:room-runtime:2.8.1")
+    kapt("androidx.room:room-compiler:2.8.1")
+    implementation("androidx.room:room-ktx:2.8.1")
 
     // DataStore
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
 
     // OpenCV (AAR on Maven Central)
     implementation("org.opencv:opencv:4.12.0")
 
     // PDF / Office
     implementation("com.itextpdf:itext7-core:9.3.0")
-    implementation("org.apache.poi:poi-ooxml:5.3.0")
+    implementation("org.apache.poi:poi-ooxml:5.4.1")
 
     // OkHttp (v5 is now stable)
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
 
     // Tests
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.4")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.appcompat:appcompat:1.7.1")
+
 }
 
