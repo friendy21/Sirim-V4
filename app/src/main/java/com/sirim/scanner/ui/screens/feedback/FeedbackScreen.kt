@@ -90,7 +90,7 @@ fun FeedbackScreen(
             Text(
                 text = "Spotted a label that refuses to scan? Tell us what happened so we can improve the recogniser.",
                 style = MaterialTheme.typography.bodyMedium
-            )
+
             prefill?.let {
                 PrefilledContextCard(report = it)
             }
@@ -240,3 +240,4 @@ private fun buildPrefillDescription(report: ScanIssueReport): String {
     builder.append("Describe what went wrong: ")
     return builder.toString()
 }
+

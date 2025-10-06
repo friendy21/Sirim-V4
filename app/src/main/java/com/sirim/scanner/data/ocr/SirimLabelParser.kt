@@ -334,7 +334,6 @@ object SirimLabelParser {
             )
             return field
         }
-
         return null
     }
 

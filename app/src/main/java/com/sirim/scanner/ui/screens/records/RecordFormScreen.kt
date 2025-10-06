@@ -84,7 +84,6 @@ fun RecordFormScreen(
     var showAddFieldDialog by rememberSaveable { mutableStateOf(false) }
 
     val fieldConfidences = scanDraft?.fieldConfidences ?: emptyMap()
-
     fun resetStates() {
         serialState.value = TextFieldValue("")
         batchState.value = TextFieldValue("")
@@ -551,6 +550,215 @@ private fun AutoFillIndicator(
             }
         }
     }
+
+    if (showAddFieldDialog) {
+        AddCustomFieldDialog(
+            onDismiss = { showAddFieldDialog = false },
+            onAdd = { name, maxLength ->
+                if (name.isNotBlank()) {
+                    fieldIdCounter += 1
+                    customFields += CustomFieldUiState(
+                        id = fieldIdCounter,
+                        name = name.trim(),
+                        maxLength = maxLength,
+                        value = TextFieldValue("")
+                    )
+                }
+                showAddFieldDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun AutoFillIndicator(
+    captureConfidence: Float?,
+    onRetake: (() -> Unit)?,
+    onReportIssue: (() -> Unit)?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Fields auto-filled from scan. Review and edit as needed.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            captureConfidence?.let {
+                val percentage = (it.coerceIn(0f, 1f) * 100).roundToInt()
+                LinearProgressIndicator(
+                    progress = it.coerceIn(0f, 1f),
+                    modifier = Modifier.fillMaxWidth(),
+                    trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                )
+                Text("Capture confidence: $percentage%", style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (onRetake != null) {
+                    TextButton(onClick = onRetake) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Retake")
+                    }
+                }
+                if (onReportIssue != null) {
+                    TextButton(onClick = onReportIssue) {
+                        Icon(Icons.Default.Feedback, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Report issue")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomFieldRow(
+    field: CustomFieldUiState,
+    onValueChange: (TextFieldValue) -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        OutlinedTextField(
+            value = field.value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            label = { Text(field.name) },
+            supportingText = { Text("Max ${field.maxLength} characters") }
+        )
+        IconButton(onClick = onDelete, modifier = Modifier.padding(top = 8.dp)) {
+            Icon(Icons.Default.Delete, contentDescription = "Remove field")
+        }
+    }
+}
+
+@Composable
+private fun AddCustomFieldDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String, Int) -> Unit
+) {
+    var fieldName by remember { mutableStateOf(TextFieldValue()) }
+    var maxLength by remember { mutableStateOf(TextFieldValue("500")) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Custom Field") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = fieldName,
+                    onValueChange = { fieldName = it },
+                    label = { Text("Field name") },
+                    placeholder = { Text("e.g. Manufacturer") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = maxLength,
+                    onValueChange = {
+                        val digits = it.text.filter(Char::isDigit)
+                        maxLength = TextFieldValue(digits)
+                    },
+                    label = { Text("Max length") },
+                    placeholder = { Text("500") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val length = maxLength.text.toIntOrNull()?.coerceAtLeast(1) ?: 500
+                    onAdd(fieldName.text, length)
+                },
+                enabled = fieldName.text.isNotBlank()
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+private data class CustomFieldUiState(
+    val id: Long,
+    val name: String,
+    val maxLength: Int,
+    val value: TextFieldValue
+) {
+    fun toEntry(): CustomFieldEntry? {
+        val trimmedValue = value.text.trim()
+        if (name.isBlank() && trimmedValue.isBlank()) return null
+        return CustomFieldEntry(
+            name = name,
+            value = trimmedValue.take(maxLength),
+            maxLength = maxLength
+        )
+    }
+}
+
+private fun applyDraftToStates(
+    draft: ScanDraft,
+    serialState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    batchState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    brandState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    modelState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    typeState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    ratingState: androidx.compose.runtime.MutableState<TextFieldValue>,
+    sizeState: androidx.compose.runtime.MutableState<TextFieldValue>
+) {
+    val values = draft.fieldValues
+    serialState.value = TextFieldValue(values["sirimSerialNo"].orEmpty())
+    batchState.value = TextFieldValue(values["batchNo"].orEmpty())
+    brandState.value = TextFieldValue(values["brandTrademark"].orEmpty())
+    modelState.value = TextFieldValue(values["model"].orEmpty())
+    typeState.value = TextFieldValue(values["type"].orEmpty())
+    ratingState.value = TextFieldValue(values["rating"].orEmpty())
+    sizeState.value = TextFieldValue(values["size"].orEmpty())
+}
+
+private fun buildScanIssueReport(
+    record: SirimRecord?,
+    scanDraft: ScanDraft?,
+    serial: String,
+    batch: String,
+    brand: String,
+    model: String,
+    type: String,
+    rating: String,
+    size: String,
+    customFields: List<CustomFieldUiState>,
+    captureConfidence: Float?,
+    imagePath: String?
+): ScanIssueReport {
+    val values = LinkedHashMap<String, String>()
+    values["sirimSerialNo"] = serial
+    values["batchNo"] = batch
+    values["brandTrademark"] = brand
+    values["model"] = model
+    values["type"] = type
+    values["rating"] = rating
+    values["size"] = size
+    customFields.forEach { field ->
+        values[field.name] = field.value.text
+    }
+    return ScanIssueReport(
+        recordId = record?.id ?: scanDraft?.recordId,
+        serial = serial.ifBlank { scanDraft?.serial ?: record?.sirimSerialNo },
+        captureConfidence = captureConfidence,
+        fieldValues = values,
+        imagePath = imagePath
+    )
 }
 
 @Composable
